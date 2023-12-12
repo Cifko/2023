@@ -49,37 +49,45 @@ answer = None
 s = x = 0
 
 
+cache = {}
+
+
 def sol1(line, index, nums, force=False):
+    global cache
+    if index == 0:
+        cache = {}
+    key = (index, nums, force)
+    if key in cache:
+        return cache[key]
     if nums[0] == 0:
-        if len(nums) == 1:
-            while index < len(line):
-                if line[index] == "#":
-                    return 0
-                index += 1
-            return 1
+        nums = nums[1:]
+        if not nums:
+            cache[key] = all(x != "#" for x in line[index:])
+            return cache[key]
         if len(line) == index:
+            cache[key] = 0
             return 0
         if line[index] == "#":
+            cache[key] = 0
             return 0
         index += 1
         force = False
-        nums = nums[1:]
     if not force:
         while index < len(line) and line[index] == ".":
             index += 1
-    s = 0
     if len(line) == index:
+        cache[key] = 0
         return 0
     if line[index] == "?":
-        if force:
-            s += sol1(line, index + 1, [nums[0] - 1] + nums[1:], True)
-        else:  # skip
+        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
+        if not force:
             s += sol1(line, index + 1, nums, False)
-            s += sol1(line, index + 1, [nums[0] - 1] + nums[1:], True)
     elif line[index] == "#":
-        s += sol1(line, index + 1, [nums[0] - 1] + nums[1:], True)
+        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
     else:
+        cache[key] = 0
         return 0
+    cache[key] = s
     return s
 
 
@@ -89,10 +97,9 @@ grid = Grid()
 col_cnt = defaultdict(int)
 while data:
     next_line()
-    print(s)
     # beware parsing line with single value, where it can be text or int and you expect int (because a will be int in this case), use 'line' instead
-    s = sol1("?".join([a[0]] * 5), 0, nums * 5)
-    s1 += s
+    s1 += sol1(a[0], 0, tuple(nums))
+    s2 += sol1("?".join([a[0]] * 5), 0, tuple(nums * 5))
 
 print("Part 1:", s1)
 pyperclip.copy(s1)  # type:ignore

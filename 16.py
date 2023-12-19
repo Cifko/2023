@@ -8,7 +8,7 @@ import time
 import pyperclip  # type:ignore
 from collections import defaultdict
 
-sys.setrecursionlimit(100000)
+sys.setrecursionlimit(110 * 110 * 4)
 
 pyperclip.copy("")  # type:ignore
 
@@ -49,50 +49,6 @@ def next_line():
 answer = None
 s = x = 0
 
-
-cache = {}
-
-
-def sol1(line, index, nums, force=False):
-    global cache
-    if index == 0:
-        cache = {}
-    key = (index, nums, force)
-    if key in cache:
-        return cache[key]
-    if nums[0] == 0:
-        nums = nums[1:]
-        if not nums:
-            cache[key] = all(x != "#" for x in line[index:])
-            return cache[key]
-        if len(line) == index:
-            cache[key] = 0
-            return 0
-        if line[index] == "#":
-            cache[key] = 0
-            return 0
-        index += 1
-        force = False
-    if not force:
-        while index < len(line) and line[index] == ".":
-            index += 1
-    if len(line) == index:
-        cache[key] = 0
-        return 0
-    if line[index] == "?":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-        if not force:
-            s += sol1(line, index + 1, nums, False)
-    elif line[index] == "#":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-    else:
-        cache[key] = 0
-        return 0
-    cache[key] = s
-    return s
-
-
-start = time.time()
 last_line = None
 s1 = s2 = x = 0
 grid = Grid()
@@ -100,8 +56,53 @@ col_cnt = defaultdict(int)
 while data:
     next_line()
     # beware parsing line with single value, where it can be text or int and you expect int (because a will be int in this case), use 'line' instead
-    s1 += sol1(a[0], 0, tuple(nums))
-    s2 += sol1("?".join([a[0]] * 5), 0, tuple(nums * 5))
+    grid.add_char_line(line)
+
+m = 0
+
+
+cache = defaultdict(set)
+
+
+def cnt(x, y, dx, dy):
+    if x < 0 or y < 0 or x >= len(grid.grid[0]) or y >= len(grid.grid):
+        cache.clear()
+    x += dx
+    y += dy
+    if x < 0 or y < 0 or x >= len(grid.grid[0]) or y >= len(grid.grid):
+        return 0
+    r = (x, y) not in cache
+    if (dx, dy) in cache[(x, y)]:
+        return 0
+    cache[(x, y)].add((dx, dy))
+    if grid.grid[y][x] == ".":
+        r += cnt(x, y, dx, dy)
+    elif grid.grid[y][x] == "/":
+        r += cnt(x, y, -dy, -dx)
+    elif grid.grid[y][x] == "\\":
+        r += cnt(x, y, dy, dx)
+    elif grid.grid[y][x] == "-":
+        if dy != 0:
+            r += cnt(x, y, dx - 1, 0)
+            r += cnt(x, y, dx + 1, 0)
+        else:
+            r += cnt(x, y, dx, dy)
+    elif grid.grid[y][x] == "|":
+        if dx != 0:
+            r += cnt(x, y, 0, dy - 1)
+            r += cnt(x, y, 0, dy + 1)
+        else:
+            r += cnt(x, y, dx, dy)
+    return r
+
+
+s1 = cnt(-1, 0, 1, 0)
+for ix in range(len(grid.grid[0])):
+    s2 = max(s2, cnt(ix, -1, 0, 1))
+    s2 = max(s2, cnt(ix, len(grid.grid), 0, -1))
+for iy in range(len(grid.grid)):
+    s2 = max(s2, cnt(-1, iy, 1, 0))
+    s2 = max(s2, cnt(len(grid.grid[0]), iy, -1, 0))
 
 print("Part 1:", s1)
 pyperclip.copy(s1)  # type:ignore
@@ -112,5 +113,3 @@ if s2:
 else:
     pass
     # post_answer(day, 1, answer)
-
-print("Time:", time.time() - start)

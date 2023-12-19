@@ -4,7 +4,6 @@ from os.path import exists
 from helper import *
 import sys
 import re
-import time
 import pyperclip  # type:ignore
 from collections import defaultdict
 
@@ -49,60 +48,47 @@ def next_line():
 answer = None
 s = x = 0
 
-
-cache = {}
-
-
-def sol1(line, index, nums, force=False):
-    global cache
-    if index == 0:
-        cache = {}
-    key = (index, nums, force)
-    if key in cache:
-        return cache[key]
-    if nums[0] == 0:
-        nums = nums[1:]
-        if not nums:
-            cache[key] = all(x != "#" for x in line[index:])
-            return cache[key]
-        if len(line) == index:
-            cache[key] = 0
-            return 0
-        if line[index] == "#":
-            cache[key] = 0
-            return 0
-        index += 1
-        force = False
-    if not force:
-        while index < len(line) and line[index] == ".":
-            index += 1
-    if len(line) == index:
-        cache[key] = 0
-        return 0
-    if line[index] == "?":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-        if not force:
-            s += sol1(line, index + 1, nums, False)
-    elif line[index] == "#":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-    else:
-        cache[key] = 0
-        return 0
-    cache[key] = s
-    return s
-
-
-start = time.time()
 last_line = None
 s1 = s2 = x = 0
 grid = Grid()
-col_cnt = defaultdict(int)
 while data:
     next_line()
     # beware parsing line with single value, where it can be text or int and you expect int (because a will be int in this case), use 'line' instead
-    s1 += sol1(a[0], 0, tuple(nums))
-    s2 += sol1("?".join([a[0]] * 5), 0, tuple(nums * 5))
+    grid.add_row(map(int, line))
 
+
+def solve(minc, maxc):
+    m = [(0, 0, 0, 0, 0, 0, [])]
+    vis = set()
+    while m:
+        s, x, y, c, dx, dy, p = heapq.heappop(m)
+        key = (x, y, dx, dy, c)
+        if key in vis:
+            continue
+        vis.add(key)
+        if dx or dy:
+            p.append((x, y))
+            s += int(grid.cells[y][x])
+        if x == len(grid.cells[0]) - 1 and y == len(grid.cells) - 1 and c >= minc:
+            return s
+        for nx, ny in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]:
+            if dx == nx - x and dy == ny - y:
+                if c == maxc:
+                    continue
+                nc = c + 1
+            else:
+                if c < minc and (dx or dy):
+                    continue
+                nc = 1
+            if nx - x == -dx and ny - y == -dy:
+                continue
+            if nx < 0 or nx >= len(grid.cells[0]) or ny < 0 or ny >= len(grid.cells):
+                continue
+            heapq.heappush(m, (s, nx, ny, nc, nx - x, ny - y, list(p)))
+
+
+s1 = solve(0, 3)
+s2 = solve(4, 10)
 print("Part 1:", s1)
 pyperclip.copy(s1)  # type:ignore
 if s2:
@@ -112,5 +98,3 @@ if s2:
 else:
     pass
     # post_answer(day, 1, answer)
-
-print("Time:", time.time() - start)

@@ -1,3 +1,7 @@
+for i in range(20):
+    print(i % 3)
+exit()
+
 import datetime
 
 now = 1095

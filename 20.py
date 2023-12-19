@@ -4,7 +4,6 @@ from os.path import exists
 from helper import *
 import sys
 import re
-import time
 import pyperclip  # type:ignore
 from collections import defaultdict
 
@@ -49,50 +48,6 @@ def next_line():
 answer = None
 s = x = 0
 
-
-cache = {}
-
-
-def sol1(line, index, nums, force=False):
-    global cache
-    if index == 0:
-        cache = {}
-    key = (index, nums, force)
-    if key in cache:
-        return cache[key]
-    if nums[0] == 0:
-        nums = nums[1:]
-        if not nums:
-            cache[key] = all(x != "#" for x in line[index:])
-            return cache[key]
-        if len(line) == index:
-            cache[key] = 0
-            return 0
-        if line[index] == "#":
-            cache[key] = 0
-            return 0
-        index += 1
-        force = False
-    if not force:
-        while index < len(line) and line[index] == ".":
-            index += 1
-    if len(line) == index:
-        cache[key] = 0
-        return 0
-    if line[index] == "?":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-        if not force:
-            s += sol1(line, index + 1, nums, False)
-    elif line[index] == "#":
-        s = sol1(line, index + 1, (nums[0] - 1,) + nums[1:], True)
-    else:
-        cache[key] = 0
-        return 0
-    cache[key] = s
-    return s
-
-
-start = time.time()
 last_line = None
 s1 = s2 = x = 0
 grid = Grid()
@@ -100,8 +55,7 @@ col_cnt = defaultdict(int)
 while data:
     next_line()
     # beware parsing line with single value, where it can be text or int and you expect int (because a will be int in this case), use 'line' instead
-    s1 += sol1(a[0], 0, tuple(nums))
-    s2 += sol1("?".join([a[0]] * 5), 0, tuple(nums * 5))
+
 
 print("Part 1:", s1)
 pyperclip.copy(s1)  # type:ignore
@@ -112,5 +66,3 @@ if s2:
 else:
     pass
     # post_answer(day, 1, answer)
-
-print("Time:", time.time() - start)

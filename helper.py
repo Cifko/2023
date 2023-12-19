@@ -2,7 +2,8 @@
 from collections import defaultdict as dd
 import heapq
 from time import time
-from typing import Any, Iterator, Callable, TypeVar, Hashable, Protocol
+from typing import Any, Iterator, Callable, TypeVar, Hashable, Protocol, Generator, Iterable, Optional, Union
+from copy import copy, deepcopy
 
 
 # type VALUE = SupportsRichComparisonT
@@ -88,18 +89,155 @@ class MaxHeap:
         return f"({len(self.items)}) {self.items}"
 
 
-class Grid:
-    def __init__(self):
-        print("Grid is y,x not x,y")
-        self._width = self._height = 0
-        self.grid = []
+class Pos:
+    def __init__(self, x: int, y: int, score: Any = 0, c: int = 0, dx: int = 0, dy: int = 0, path: list[tuple[int, int]] = [], backpack: tuple[Any, ...] = ()):
+        self._x = x
+        self._y = y
+        self._c = c
+        self._dx = dx
+        self._dy = dy
+        self._path = path
+        self._backpack = backpack
+        self.score = score
 
-    def add_border(self, value: Any):
-        self.grid = [[value] * self._width] + self.grid + [[value] * self._width]
-        for i, line in enumerate(self.grid):
-            self.grid[i] = [value] + line + [value]
-        self._width += 2
-        self._height += 2
+    def get_next(self, nx: int, ny: int) -> "Pos":
+        if nx == self.x + self.dx and ny == self.y + self.dy:
+            nc = self.c + 1
+        else:
+            nc = 1
+        return Pos(nx, ny, self.score, nc, nx - self.x, ny - self.y, self.path + [(self.x, self.y)], self.backpack)
+
+    def same_dir(self, other: "Pos") -> bool:
+        return other.dx == self.dx and other.dy == self.dy
+
+    @property
+    def x(self) -> int:
+        return self._x
+
+    @property
+    def y(self) -> int:
+        return self._y
+
+    @property
+    def c(self) -> int:
+        return self._c
+
+    @property
+    def dx(self) -> int:
+        return self._dx
+
+    @property
+    def dy(self) -> int:
+        return self._dy
+
+    @property
+    def path(self) -> list[tuple[int, int]]:
+        return self._path
+
+    @property
+    def backpack(self) -> tuple[Any, ...]:
+        return self._backpack
+
+    @property
+    def score(self) -> Any:
+        return self._score
+
+    @score.setter
+    def score(self, value: Any):
+        self._score = value
+
+    def __lt__(self, other: "Pos"):
+        return self.score < other.score
+
+    def __str__(self):
+        return f"({self.x}, {self.y}) {self.score} {self.backpack}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class Grid[V]:
+    def __init__(self):
+        self._width = 0
+        self._height = 0
+        self.cells: list[list[V]] = []
+        self._get: Callable[[int, int], Generator[tuple[int, int], None, None]] = self.get4
+
+    @property
+    def get(self) -> Callable[[int, int], Generator[tuple[int, int], None, None]]:
+        return self._get
+
+    @get.setter
+    def get(self, value: Callable[[int, int], Generator[tuple[int, int], None, None]]):
+        self._get = value
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def height(self):
+        return self._height
+
+    def add_row(self, row: Iterable[V]):
+        self.cells.append(list(row))
+        if self.height > 0:
+            if len(self.cells[-1]) != self.width:
+                raise Exception("Row width mismatch")
+        else:
+            self._width = len(self.cells[-1])
+        self._height += 1
+
+    def __str__(self):
+        return "\n".join(["".join(map(str, row)) for row in self.cells])
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def get4(self, x: int, y: int) -> Generator[tuple[int, int], None, None]:
+        for nx, ny in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]:
+            if 0 <= nx < self.width and 0 <= ny < self.height:
+                yield nx, ny
+
+    def get8(self, x: int, y: int) -> Generator[tuple[int, int], None, None]:
+        for nx, ny in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), (x + 1, y + 1), (x - 1, y + 1), (x + 1, y - 1), (x - 1, y - 1)]:
+            if 0 <= nx < self.width and 0 <= ny < self.height:
+                yield nx, ny
+
+    def djikstra(
+        self,
+        start: Pos,
+        next: Callable[[Pos, Pos], Optional[Pos]],
+        is_end: Callable[[Pos], bool],
+        cache_key: Callable[[Pos], Hashable] = lambda pos: (pos.x, pos.y, pos.backpack),
+    ) -> Optional[Pos]:
+        heap: list[Pos] = [start]
+        cache: set[Hashable] = set()
+        while heap:
+            pos = heapq.heappop(heap)
+            key = cache_key(pos)
+            if key in cache:
+                continue
+            cache.add(key)
+            if is_end(pos):
+                return pos
+            for nx, ny in self._get(pos.x, pos.y):
+                next_pos = next(pos, pos.get_next(nx, ny))
+                if next_pos:
+                    heapq.heappush(heap, next_pos)
+        return None
+
+    def is_last(self, pos: Pos):
+        return pos.x == self.width - 1 and pos.y == self.height - 1
+
+    def __iter__(self) -> Generator[tuple[int, int, V], None, None]:
+        for y, line in enumerate(self.cells):
+            for x, cell in enumerate(line):
+                yield (x, y, cell)
+
+    @property
+    def size(self) -> int:
+        return self.width * self.height
 
     def upscale3x3(self, upscale: Any):
         self._width *= 3
@@ -113,131 +251,60 @@ class Grid:
                         new_grid[y * 3 + dy][x * 3 + dx] = up[dy][dx]
         self.grid = new_grid
 
-    def add_char_line(self, line):
-        self._height += 1
-        self.grid.append(list(line))
-        self._width = len(self.grid[-1])
+    def add_border(self, value: V):
+        for i in range(self._height):
+            self.cells[i].insert(0, value)
+            self.cells[i].append(value)
+        self._width += 2
+        self.cells.insert(0, [value] * self._width)
+        self.cells.append([value] * self._width)
+        self._height += 2
 
-    def add_int_line(self, line):
-        self._height += 1
-        self.grid.append(list(map(int, line)))
-        self._width = len(self.grid[-1])
-
-    def __repr__(self):
-        res = f"H({self._height}) x W({self._width})\n"
-        res += "\n".join("".join(map(str, line)) for line in self.grid)
-        return res
-
-    def get_size(self):
-        return self._width * self._height
-
-    def enumerate(self):
-        for y, line in enumerate(self.grid):
-            for x, cell in enumerate(line):
-                yield (x, y, cell)
-
-    def flood_fill(self, x: int, y: int, value):
-        initial_value = self.grid[y][x]
+    def flood_fill(self, x: int, y: int, value: Any) -> int:
+        initial_value = self.cells[y][x]
         next = [(x, y)]
         filled = 0
         while next:
             x, y = next.pop()
-            if self.grid[y][x] != initial_value:
+            if self.cells[y][x] != initial_value:
                 continue
-            self.grid[y][x] = value
+            self.cells[y][x] = value
             filled += 1
-            next.extend(self.get4(x, y))
+            next.extend(self._get(x, y))
         return filled
 
-    def map(self, fn):
-        for x, y, value in self.enumerate():
-            self.grid[y][x] = fn(value)
+    def map(self, fn: Callable[[V], V]):
+        for x, y, value in self:
+            self.cells[y][x] = fn(value)
 
-    def get4(self, x, y):
-        return [(nx, ny) for nx, ny in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] if 0 <= nx < self._width and 0 <= ny < self._height]
-
-    def get8(self, x, y):
-        return [
-            (nx, ny)
-            for nx, ny in [(x - 1, y - 1), (x, y - 1), (x + 1, y - 1), (x + 1, y), (x + 1, y + 1), (x, y + 1), (x - 1, y + 1), (x - 1, y)]
-            if 0 <= nx < self._width and 0 <= ny < self._height
-        ]
-
-    def inc(self):
-        self.map(lambda x: x + 1)
-
-    def dec(self):
-        self.map(lambda x: x - 1)
-
-    def add(self, value):
+    def add(self, value: Any):
         self.map(lambda x: x + value)
 
-    def sub(self, value):
+    def sub(self, value: Any):
         self.map(lambda x: x - value)
 
-    def mul(self, value):
+    def mul(self, value: Any):
         self.map(lambda x: x * value)
 
-    def div(self, value):
+    def div(self, value: Any):
         self.map(lambda x: x // value)
 
-    def divf(self, value):
+    def divf(self, value: Any):
         self.map(lambda x: x / value)
 
-    def __getitem__(self, key):
-        if type(key) == int:
-            return self.grid[key]
-        if type(key) == tuple and len(key) == 2:
-            if type(key[1]) == slice:
-                return [row[key[0]] for row in self.grid[key[1]]]
-            return self.grid[key[1]][key[0]]
-        raise Exception("__getitem__ wrong key {key}")
-
-    def __setitem__(self, key, value):
-        if type(key) == tuple and len(key) == 2:
-            self.grid[key[1]][key[0]] = value
-            return value
-        raise Exception(f"__setitem__ wrong key {key}")
-
-    def get_row(self, row):
-        return self.grid[row]
-
-    def get_col(self, col):
-        return self[col, :]
-
-    def inverse(self):
+    def transpose(self):
         self._width, self._height = self._height, self._width
         self.grid = zip(*self.grid)
 
-    def get_width(self):
-        return self._width
-
-    def get_height(self):
-        return self._height
-
-    def gen_graph(self):
-        graph = Graph()
-        for x, y, value in self.enumerate():
-            graph.add_vertex((x, y), value)
-            if 0 < x:
-                graph.add_edge((x - 1, y), (x, y))
-            if 0 < y:
-                graph.add_edge((x, y - 1), (x, y))
-        return graph
-
-    def find_one(self, value):
-        for x, y, val in self.enumerate():
+    def find_one(self, value: V) -> Optional[tuple[int, int]]:
+        for x, y, val in self:
             if val == value:
                 return (x, y)
 
-    def find_all(self, value):
-        for x, y, val in self.enumerate():
+    def find_all(self, value: V) -> Generator[tuple[int, int], None, None]:
+        for x, y, val in self:
             if val == value:
                 yield (x, y)
-
-    size = property(get_size)
-    width = property(get_width)
-    height = property(get_height)
 
 
 class Instant:
@@ -430,10 +497,63 @@ class Vector:
                 yield Vector(pos)
 
 
+# class Interval:
+#     def __init__(self, start: int, end: int):
+#         self.start = start
+#         self.end = end
+
+#     def __contains__(self, value: int):
+#         return self.start <= value <= self.end
+
+#     def __repr__(self):
+#         return f"[{self.start}, {self.end}]"
+
+#     def __str__(self):
+#         return self.__repr__()
+
+#     def __ge__(self, other: int) -> "Interval":
+#         return Interval(max(self.start, other), self.end)
+
+#     def __gt__(self, other: int) -> "Interval":
+#         return Interval(max(self.start, other + 1), self.end)
+
+#     def __le__(self, other: int) -> "Interval":
+#         return Interval(self.start, min(self.end, other))
+
+#     def __lt__(self, other: int) -> "Interval":
+#         return Interval(self.start, min(self.end, other - 1))
+
+#     def __bool__(self) -> bool:
+#         return self.start <= self.end
+
+#     def joinable(self, other: "Interval") -> bool:
+#         return self.start <= other.end + 1 and self.end >= other.start - 1
+
+#     def join(self, other: "Interval") -> "Interval":
+#         if not self.joinable(other):
+#             raise Exception("Not joinable", self, other)
+#         return Interval(min(self.start, other.start), max(self.end, other.end))
+
+#     def __add__(self, other: Union["Interval", int]) -> "Interval":
+#         if isinstance(other, int):
+#             return Interval(self.start + other, self.end + other)
+#         return self.join(other)
+
+#     def __iadd__(self, other: Union["Interval", int]) -> "Interval":
+#         if isinstance(other, int):
+#             self.start += other
+#             self.end += other
+#             return self
+#         return self.join(other)
+
+#     def __copy__(self) -> "Interval":
+#         return Interval(self.start, self.end)
+
+
 class Intervals:
     # Integers numbers coverage. So if you add (1,3) and (4,5) that means all numbers from 1 to 5 are covered
-    def __init__(self):
-        self.intervals: list[tuple[int, int]] = []
+    def __init__(self, data: list[tuple[int, int]] = []):
+        self.intervals: list[tuple[int, int]] = data
 
     def add(self, start: int, end: int, include_reverse: bool = False):
         if start > end and not include_reverse:
@@ -477,7 +597,79 @@ class Intervals:
             last = y
         return gaps
 
+    def __repr__(self) -> str:
+        return f"Intervals {self.intervals}"
 
+    def __add__(self, other: Union[int, "Intervals"]) -> "Intervals":
+        res = copy(self)
+        res += other
+        return res
+
+    def __sub__(self, other: Union[int, "Intervals"]) -> "Intervals":
+        res = copy(self)
+        res -= other
+        return res
+
+    def __iadd__(self, other: Union[int, "Intervals"]) -> "Intervals":
+        if isinstance(other, int):
+            self.intervals = [(s + other, e + other) for s, e in self.intervals]
+            return self
+
+        x = sorted(self.intervals + other.intervals)
+        new_intervals: list[tuple[int, int]] = []
+        for i in x:
+            if new_intervals and new_intervals[-1][1] + 1 >= i[0]:
+                new_intervals[-1] = (new_intervals[-1][0], max(new_intervals[-1][1], i[1]))
+            else:
+                new_intervals += [i]
+        self.intervals = new_intervals
+        return self
+
+    def __isub__(self, other: Union[int, "Intervals"]) -> "Intervals":
+        if isinstance(other, int):
+            self.intervals = [(s - other, e - other) for s, e in self.intervals]
+            return self
+
+        new_intervals: list[tuple[int, int]] = []
+        for s, e in self.intervals:
+            for os, oe in other.intervals:
+                if os <= s <= oe:
+                    s = oe + 1
+                if os <= e <= oe:
+                    e = os - 1
+            if s <= e:
+                new_intervals += [(s, e)]
+        self.intervals = new_intervals
+        return self
+
+    def __iter__(self) -> Iterator[tuple[int, int]]:
+        return iter(self.intervals)
+
+    def __getitem__(self, index: int) -> tuple[int, int]:
+        return self.intervals[index]
+
+    def __len__(self) -> int:
+        return len(self.intervals)
+
+    def __lt__(self, other: int) -> "Intervals":
+        return Intervals([(s, min(e, other - 1)) for s, e in self.intervals if other > s])
+
+    def __le__(self, other: int) -> "Intervals":
+        return Intervals([(s, min(e, other)) for s, e in self.intervals if other >= s])
+
+    def __gt__(self, other: int) -> "Intervals":
+        return Intervals([(max(s, other + 1), e) for s, e in self.intervals if other < e])
+
+    def __ge__(self, other: int) -> "Intervals":
+        return Intervals([(max(s, other), e) for s, e in self.intervals if other <= e])
+
+    def __bool__(self) -> bool:
+        return bool(self.intervals)
+
+
+x = Intervals([(0, 10)])
+y = Intervals([(4, 6)])
+print(x - y)
 # x = Graph[int, str]()
 # x.add_vertex(0, "a")
 # x.add_vertex(1, "b")

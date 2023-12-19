@@ -123,11 +123,10 @@ for y in range(g.height):
 s1 = len(path) // 6
 s2 -= g.flood_fill(0, 0, ".")
 s2 = (s2 - len(path) + 8) // 9
+print("Part 1:", s1)
+pyperclip.copy(s1)  # type:ignore
 if s2:
     print("Part 2:", s2)
     pyperclip.copy(s2)  # type:ignore
     # post_answer(day, 2, answer)
-else:
-    print("Part 1:", s1)
-    pyperclip.copy(s1)  # type:ignore
 # post_answer(day, 1, answer)
